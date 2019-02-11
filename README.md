@@ -7,7 +7,7 @@ Demo of MQTT Sparkplug client to monitor sensors exceeding a threshold
 This MQTT subscriber client is specifically designed to monitor the topic
 namespace of the Sparkplug protocol on top of MQTT detailed at
 
-https://www.cirrus-link.com/oem-device-data-integration/
+https://www.cirrus-link.com/mqtt-sparkplug-tahu/
 
 It counts Topics, EON nodes, devices and tags as defined in the Sparkplug
 spec.
