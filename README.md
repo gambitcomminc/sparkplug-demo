@@ -1,15 +1,20 @@
-# sparkplug-demo
+# sparkplug-demo / sparkplug-thresh
 
 ## Overview
 
 Demo of MQTT Sparkplug client to monitor sensors exceeding a threshold 
 
-This MQTT subscriber client is specifically designed to monitor the topic
+This pair of MQTT subscriber clients is specifically designed to monitor the topic
 namespace of the Sparkplug protocol on top of MQTT detailed at
 
 https://www.cirrus-link.com/mqtt-sparkplug-tahu/
 
-It counts Topics, EON nodes, devices and tags as defined in the Sparkplug
+The sparkplug-thresh client is stdout based, whereas sparkplug-demo requires
+the graphics package GTK.
+
+sparkplug-debug with -v option (debug mode) displays the received Sparkplug messages.
+
+sparkplug-demo also counts Topics, EON nodes, devices and tags as defined in the Sparkplug
 spec.
 
 It also maintains statistics for the last second on Active Topics, messages / sec,
@@ -24,11 +29,25 @@ in the list.
 Requires:
 
 - Eclipse Paho Python https://www.eclipse.org/paho/clients/python/docs/
-- GTK https://python-gtk-3-tutorial.readthedocs.io/en/latest/
 - Sparkplug Python https://github.com/Cirrus-Link/Sparkplug
+
+sparkplug-demo also requires:
+
+- GTK https://python-gtk-3-tutorial.readthedocs.io/en/latest/
+
 
 ## Usage
 
-See this Youtube video https://www.youtube.com/watch?v=8bnMOPzntAM with 50k tags
+For sparkplug-demo:
+```
+% python sparkplug-thresh.py -h iot.eclipse.org -v
+DEBUG 2019-04-12 13:56:38,381 (sparkplug-thresh) - MQTT client connected with result code 0
+DEBUG 2019-04-12 13:56:40,884 (sparkplug-thresh) - DDATA --> EON 20:19:AB:F4:0E:10 needs rebirth
+DEBUG 2019-04-12 13:56:40,884 (sparkplug-thresh) - DDATA --> Device 20:19:AB:F4:0E:10/sensor11 needs rebirth
+DEBUG 2019-04-12 13:56:40,884 (sparkplug-thresh) - DDATA --> Device 20:19:AB:F4:0E:10/sensor11 metric XDK/temp = 50000
+```
+
+
+See also this Youtube video https://www.youtube.com/watch?v=8bnMOPzntAM with 50k tags
 or this one https://www.youtube.com/watch?v=5299EYSbW8M with 200k.
 
