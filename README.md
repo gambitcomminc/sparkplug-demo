@@ -12,7 +12,7 @@ https://www.cirrus-link.com/mqtt-sparkplug-tahu/
 The sparkplug-thresh client is stdout based, whereas sparkplug-demo requires
 the graphics package GTK.
 
-sparkplug-debug with -v option (debug mode) displays the received Sparkplug messages.
+sparkplug-thresh with -v option (debug mode) displays the received Sparkplug messages.
 
 sparkplug-demo also counts Topics, EON nodes, devices and tags as defined in the Sparkplug
 spec.
