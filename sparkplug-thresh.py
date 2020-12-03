@@ -174,6 +174,27 @@ def on_connect(client, userdata, flags, rc):
     # reconnect then subscriptions will be renewed.
     client.subscribe(main.topic, main.qos)
 
+def debug_metric(msgtype, device, metric):
+    if metric.datatype == MetricDataType.Int8 or metric.datatype == MetricDataType.Int16 or metric.datatype == MetricDataType.Int32:
+	valuestr = str(metric.int_value)
+    elif metric.datatype == MetricDataType.UInt8 or metric.datatype == MetricDataType.UInt16 or metric.datatype == MetricDataType.UInt32:
+	valuestr = str(metric.int_value)
+    elif metric.datatype == MetricDataType.Int64 or metric.datatype == MetricDataType.UInt64 or metric.datatype == MetricDataType.DateTime:
+	valuestr = str(metric.long_value)
+    elif metric.datatype == MetricDataType.Float:
+	valuestr = str(metric.float_value)
+    elif metric.datatype == MetricDataType.Double:
+	valuestr = str(metric.double_value)
+    elif metric.datatype == MetricDataType.Boolean:
+	valuestr = str(metric.boolean_value)
+    elif metric.datatype == MetricDataType.String or metric.datatype == MetricDataType.Text or metric.datatype == MetricDataType.UUID:
+	valuestr = metric.string_value
+    elif metric.datatype == MetricDataType.DataSet:
+	valuestr = str(metric.dataset_value)
+    else:
+	valuestr = "UNKNOWN"
+    logging.debug (msgtype + ' --> Device ' + device + ' metric ' + metric.name + ' = ' + valuestr)
+
 # The callback for when a PUBLISH message is received from the server.
 # updates metrics for later GUI display
 def on_message(client, userdata, msg):
@@ -221,6 +242,8 @@ def on_message(client, userdata, msg):
 	if msgtype != 'NBIRTH':
 		logging.debug (msgtype + ' --> EON ' + eon + ' needs rebirth')
 		main.num_eons_offline += 1
+	else:
+		logging.debug (msgtype + ' --> EON ' + eon + ' online')
 
     else:
 	if msgtype == 'NDEATH':
@@ -253,14 +276,14 @@ def on_message(client, userdata, msg):
 			if main.num_devices_offline > 0:
 				main.num_devices_offline -= 1
 
-	# look at the payload only for DDATA
-	if msgtype != 'DDATA':
+	# look at the payload only for NBIRTH, DBIRTH, DDATA
+	if msgtype != 'DDATA' and msgtype != 'DBIRTH' and msgtype != 'NBIRTH':
 		return
 
 	inboundPayload = sparkplug_b_pb2.Payload()
 	inboundPayload.ParseFromString(msg.payload)
 	for metric in inboundPayload.metrics:
-		logging.debug (msgtype + ' --> Device ' + device + ' metric ' + metric.name + ' = ' + str(metric.int_value))
+		debug_metric (msgtype, device, metric)
 		tag = device + '/' + metric.name
 		if tag not in main.tags:
 			main.num_tags += 1
@@ -337,7 +360,7 @@ class MyApp:
 		print ("\t[-p|--port port]        port to connect to; default port 1883")
 		print ("\t[-t|--topic topic]      topic; default spBv1.0/#")
 		print ("\t[-q|--qos qos]          QoS; default 0")
-		print ("\t[-t|--thresh threshold] temperature threshold; default 70000")
+		print ("\t[-T|--thresh threshold] temperature threshold; default 70000")
 		print ("\t[-v|--verbose]    verbose output")
 		return
 
@@ -347,7 +370,7 @@ class MyApp:
 		config_logger ()
 
 		subscriber_client (self.host_ip)
-		logger.debug('after subscriber_client')
+		logging.debug('after subscriber_client')
 
 	###############################
 	def command_line(self):
