@@ -36,6 +36,7 @@ sparkplug-demo also requires:
 
 - GTK https://python-gtk-3-tutorial.readthedocs.io/en/latest/
 
+Tested on both Linux and Windows.
 
 ## Usage
 
