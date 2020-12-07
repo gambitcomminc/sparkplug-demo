@@ -281,7 +281,12 @@ def on_message(client, userdata, msg):
 		return
 
 	inboundPayload = sparkplug_b_pb2.Payload()
-	inboundPayload.ParseFromString(msg.payload)
+	
+	try:
+		inboundPayload.ParseFromString(msg.payload)
+	except:
+		pass
+
 	for metric in inboundPayload.metrics:
 		debug_metric (msgtype, device, metric)
 		tag = device + '/' + metric.name
@@ -355,7 +360,7 @@ class MyApp:
 		self.triggered_set = set()
 
 	def usage(self):
-		print ("Usage: mqtt-stats.py")
+		print ("Usage: sparkplug-thresh.py")
 		print ("\t[-h|--host host]        broker to connect to; default localhost")
 		print ("\t[-p|--port port]        port to connect to; default port 1883")
 		print ("\t[-t|--topic topic]      topic; default spBv1.0/#")
