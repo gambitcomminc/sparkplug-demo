@@ -230,11 +230,14 @@ def on_message(client, userdata, msg):
     	logging.debug ("ignored non-Sparkplug message on topic " + msg.topic)
     	return
 
+    if len(tokens) < 4:
+    	logging.debug ("ignored non-Sparkplug topic " + msg.topic)
+    	return
+
     # TODO filter by groupid
     groupid = tokens[1]
     msgtype = tokens[2]
     eon = tokens[3]
-    
     if eon not in main.eons:
     	main.num_eons += 1
 	neweon = Eon(main.num_eons, eon, now)
@@ -276,8 +279,8 @@ def on_message(client, userdata, msg):
 			if main.num_devices_offline > 0:
 				main.num_devices_offline -= 1
 
-	# look at the payload only for NBIRTH, DBIRTH, DDATA
-	if msgtype != 'DDATA' and msgtype != 'DBIRTH' and msgtype != 'NBIRTH':
+	# look at the payload only for NBIRTH, DBIRTH, DDATA, DDEATH and NDEATH
+	if msgtype != 'DDATA' and msgtype != 'DBIRTH' and msgtype != 'NBIRTH' and msgtype != 'DDEATH' and msgtype != 'NDEATH':
 		return
 
 	inboundPayload = sparkplug_b_pb2.Payload()
