@@ -71,15 +71,15 @@ if debug:
     # debug.setLogger(debug.Debug('all'))
 
     if main.verbose:
-	formatting = '%(levelname)s %(asctime)s (%(module)s) - %(message)s'
-	logging.basicConfig(level=logging.DEBUG, format=formatting, )
+      formatting = '%(levelname)s %(asctime)s (%(module)s) - %(message)s'
+      logging.basicConfig(level=logging.DEBUG, format=formatting, )
 
-	logger.setLevel(logging.DEBUG)
+      logger.setLevel(logging.DEBUG)
     else:
-	formatting = '%(levelname)s %(asctime)s (%(module)s) - %(message)s'
-	logging.basicConfig(level=logging.ERROR, format=formatting, )
+      formatting = '%(levelname)s %(asctime)s (%(module)s) - %(message)s'
+      logging.basicConfig(level=logging.ERROR, format=formatting, )
 
-	logger.setLevel(logging.ERROR)
+      logger.setLevel(logging.ERROR)
 
 
 
@@ -136,6 +136,7 @@ class Eon():
 		self.number = number
 		self.count = 1;		# seen at least once
 		self.last_time = last_time
+		self.tagaliases = dict()
 
 	def dump(self, outfile):
 		print ("%6d %20s %6d %6d %s" % (self.number, self.name, self.count, self.last_time), file=outfile)
@@ -174,36 +175,60 @@ def on_connect(client, userdata, flags, rc):
     # reconnect then subscriptions will be renewed.
     client.subscribe(main.topic, main.qos)
 
-def debug_metric(msgtype, device, metric):
+def debug_metric(msgtype, device, metricname, metric):
     if metric.datatype == MetricDataType.Int8 or metric.datatype == MetricDataType.Int16 or metric.datatype == MetricDataType.Int32:
-	valuestr = str(metric.int_value)
+        valuestr = str(metric.int_value)
     elif metric.datatype == MetricDataType.UInt8 or metric.datatype == MetricDataType.UInt16 or metric.datatype == MetricDataType.UInt32:
-	valuestr = str(metric.int_value)
+        valuestr = str(metric.int_value)
     elif metric.datatype == MetricDataType.Int64 or metric.datatype == MetricDataType.UInt64 or metric.datatype == MetricDataType.DateTime:
-	valuestr = str(metric.long_value)
+        valuestr = str(metric.long_value)
     elif metric.datatype == MetricDataType.Float:
-	valuestr = str(metric.float_value)
+        valuestr = str(metric.float_value)
     elif metric.datatype == MetricDataType.Double:
-	valuestr = str(metric.double_value)
+        valuestr = str(metric.double_value)
     elif metric.datatype == MetricDataType.Boolean:
-	valuestr = str(metric.boolean_value)
+        valuestr = str(metric.boolean_value)
     elif metric.datatype == MetricDataType.String or metric.datatype == MetricDataType.Text or metric.datatype == MetricDataType.UUID:
-	valuestr = metric.string_value
+        valuestr = metric.string_value
     elif metric.datatype == MetricDataType.DataSet:
-	valuestr = str(metric.dataset_value)
+        valuestr = str(metric.dataset_value)
     else:
-	valuestr = "UNKNOWN"
-    logging.debug (msgtype + ' --> Device ' + device + ' metric ' + metric.name + ' = ' + valuestr)
+        valuestr = "UNKNOWN"
+    logging.debug (msgtype + ' --> Device ' + device + ' metric ' + metricname + ' = ' + valuestr)
+
+
+def _send_node_rebirth(client, groupid, eon):
+    try:
+        logging.debug ('sending NCMD rebirth...')
+	command = sparkplug.getDdataPayload()
+	addMetric(command, 'Node Control/Rebirth', 0, MetricDataType.Boolean, True)
+	byteArray = bytearray(command.SerializeToString())
+	client.publish('spBv1.0/' + groupid + '/NCMD/' + eon, byteArray, 0, False)
+    except:
+	# print help information and exit:
+	logging.error ('some error')
+	logging.error (str(err))
+    return
+
+def _type2str(typeval):
+    if typeval < MetricDataType.Unknown:
+        return "ILLEGAL"
+    if typeval > MetricDataType.Template:
+        return "ILLEGAL"
+
+    typestrings = ['UNKNOWN', 'INT8', 'INT16', 'INT32', 'INT64', 'UINT8', 'UINT16', 'UINT32', 'UINT64', 'FLOAT', 'DOUBLE', 'BOOLEAN', 'STRING', 'DATETIME', 'TEXT', 'UUID', 'BYTES', 'FILE', 'TEMPLATE']
+    return typestrings[typeval]
+
 
 # The callback for when a PUBLISH message is received from the server.
 # updates metrics for later GUI display
 def on_message(client, userdata, msg):
     if main.clear_stats:
-	main.messages_received = 0
-	main.topics = dict()
-	main.num_topics = 0
-	main.clear_stats = False
-	main.clear_store = True
+        main.messages_received = 0
+        main.topics = dict()
+        main.num_topics = 0
+        main.clear_stats = False
+        main.clear_store = True
 
     bytes = len (msg.payload)
     now = time.time()
@@ -214,100 +239,165 @@ def on_message(client, userdata, msg):
 
     # if not already there, add to set of topics detected
     if msg.topic not in main.topics:
-    	main.num_topics += 1
-	newtopic = Topic(main.num_topics, msg.topic, bytes, now, msg.payload, None)
-	main.topics[msg.topic] = newtopic
+        main.num_topics += 1
+        newtopic = Topic(main.num_topics, msg.topic, bytes, now, msg.payload, None)
+        main.topics[msg.topic] = newtopic
     else:
-    	existingtopic = main.topics[msg.topic]
-	existingtopic.count += 1
-	existingtopic.bytes += bytes
-	existingtopic.last_time = now
-	existingtopic.last_payload = msg.payload
+        existingtopic = main.topics[msg.topic]
+        existingtopic.count += 1
+        existingtopic.bytes += bytes
+        existingtopic.last_time = now
+        existingtopic.last_payload = msg.payload
 
     # decode Sparkplug messages, but only on spBv1.0/# topic
     tokens = msg.topic.split("/")
     if tokens[0] != "spBv1.0":
-    	logging.debug ("ignored non-Sparkplug message on topic " + msg.topic)
-    	return
+        logging.debug ("ignored non-Sparkplug message on topic " + msg.topic)
+        return
 
     if len(tokens) < 4:
-    	logging.debug ("ignored non-Sparkplug topic " + msg.topic)
-    	return
+        logging.debug ("ignored non-Sparkplug topic " + msg.topic)
+        return
 
     # TODO filter by groupid
     groupid = tokens[1]
     msgtype = tokens[2]
     eon = tokens[3]
     if eon not in main.eons:
-    	main.num_eons += 1
-	neweon = Eon(main.num_eons, eon, now)
-	main.eons[eon] = neweon
-	if msgtype != 'NBIRTH':
-		logging.debug (msgtype + ' --> EON ' + eon + ' needs rebirth')
-		main.num_eons_offline += 1
-	else:
-		logging.debug (msgtype + ' --> EON ' + eon + ' online')
+        main.num_eons += 1
+        neweon = Eon(main.num_eons, eon, now)
+        main.eons[eon] = neweon
+        if msgtype == 'NCMD':
+	    # nothing to do
+	    pass
+        elif msgtype != 'NBIRTH':
+            logging.debug (msgtype + ' --> EON ' + eon + ' needs rebirth')
+            main.num_eons_offline += 1
+        else:
+            logging.debug (msgtype + ' --> EON ' + eon + ' online')
 
     else:
-	if msgtype == 'NDEATH':
-		logging.debug (msgtype + ' --> EON ' + eon + ' offline')
-		main.num_eons_offline += 1
-	if msgtype == 'NBIRTH':
-		logging.debug (msgtype + ' --> EON ' + eon + ' online')
-		if main.num_eons_offline > 0:
-			main.num_eons_offline -= 1
+        if msgtype == 'NDEATH':
+        	logging.debug (msgtype + ' --> EON ' + eon + ' offline')
+        	main.num_eons_offline += 1
+        if msgtype == 'NBIRTH':
+        	logging.debug (msgtype + ' --> EON ' + eon + ' online')
+        	if main.num_eons_offline > 0:
+        		main.num_eons_offline -= 1
 
     if msgtype == 'DBIRTH' or msgtype == 'DDATA' or msgtype == 'DDEATH':
-	device = eon + '/' + tokens[4]
+        device = eon + '/' + tokens[4]
 
-	if device not in main.devices:
-		main.num_devices += 1
-		newdevice = Device(main.num_devices, device, now)
-		main.devices[device] = newdevice
-		if msgtype != 'DBIRTH':
-			logging.debug (msgtype + ' --> Device ' + device + ' needs rebirth')
-			main.num_devices_offline += 1
-		else:
-			logging.debug (msgtype + ' --> Device ' + device + ' online')
+        if device not in main.devices:
+        	main.num_devices += 1
+        	newdevice = Device(main.num_devices, device, now)
+        	main.devices[device] = newdevice
+        	if msgtype != 'DBIRTH':
+        		logging.debug (msgtype + ' --> Device ' + device + ' needs rebirth')
+			# uncomment this line to send Node Control Rebirth
+	                #_send_node_rebirth (client, groupid, eon)
+        		main.num_devices_offline += 1
+        	else:
+        		logging.debug (msgtype + ' --> Device ' + device + ' online')
 
-	else:
-		if msgtype == 'DDEATH':
-			logging.debug (msgtype + ' --> Device ' + device + ' offline')
-			main.num_devices_offline += 1
+        else:
+        	if msgtype == 'DDEATH':
+        		logging.debug (msgtype + ' --> Device ' + device + ' offline')
+        		main.num_devices_offline += 1
 
-		if msgtype == 'DBIRTH':
-			if main.num_devices_offline > 0:
-				main.num_devices_offline -= 1
+        	if msgtype == 'DBIRTH':
+        		if main.num_devices_offline > 0:
+        			main.num_devices_offline -= 1
 
-	# look at the payload only for NBIRTH, DBIRTH, DDATA, DDEATH and NDEATH
-	if msgtype != 'DDATA' and msgtype != 'DBIRTH' and msgtype != 'NBIRTH' and msgtype != 'DDEATH' and msgtype != 'NDEATH':
-		return
+    # look at the payload only for NBIRTH, DBIRTH, DDATA, DDEATH and NDEATH
+    # the rest ignored
+    if msgtype != 'DDATA' and msgtype != 'DBIRTH' and msgtype != 'NBIRTH' and msgtype != 'DDEATH' and msgtype != 'NDEATH':
+        # comment the following out if too many
+	logging.debug ('topic ' + msg.topic + ' ignoring msg ' + msgtype)
+        inboundPayload = sparkplug_b_pb2.Payload()
 
-	inboundPayload = sparkplug_b_pb2.Payload()
+        try:
+            inboundPayload.ParseFromString(msg.payload)
+        except:
+            # TODO keep stats on parse failures
+            pass
+
+        logging.debug (inboundPayload)
+        return
+
+    # look at the payload only for NBIRTH, DBIRTH, DDATA, DDEATH and NDEATH
+    inboundPayload = sparkplug_b_pb2.Payload()
 	
-	try:
-		inboundPayload.ParseFromString(msg.payload)
-	except:
-		pass
+    try:
+        inboundPayload.ParseFromString(msg.payload)
+    except:
+        # TODO keep stats on parse failures
+        pass
 
-	for metric in inboundPayload.metrics:
-		debug_metric (msgtype, device, metric)
-		tag = device + '/' + metric.name
-		if tag not in main.tags:
-			main.num_tags += 1
-			newtag = Tag(main.num_tags, tag, now)
-			main.tags[tag] = newtag
+    # uncomment below to dump Sparkplug B payload in JSON format
+    logging.debug (inboundPayload)
+
+    report_sparkplug_metrics = False
+    # uncomment below to dump Sparkplug B payload for SPARKPLUG_METRICS
+    # if selectively listening on DBIRTH topic, this prints the necessary
+    # metrics advertised in the DBIRTH for setting SPARKPLUG_METRICS in MIMIC
+    #if msgtype == 'DBIRTH':
+    #    report_sparkplug_metrics = True
+    if report_sparkplug_metrics:
+        SPARKPLUG_METRICS = ''
+        for metric in inboundPayload.metrics:
+#            print (metric)
+            if SPARKPLUG_METRICS != '':
+                SPARKPLUG_METRICS = SPARKPLUG_METRICS + ' '
+            SPARKPLUG_METRICS = SPARKPLUG_METRICS + '*,' + metric.name
+            # have not been able to figure out how to query if alias is really
+            # set except via str() method
+            if str(metric).find('alias:') != -1:
+                SPARKPLUG_METRICS = SPARKPLUG_METRICS + ':' + str(metric.alias)
+            SPARKPLUG_METRICS = SPARKPLUG_METRICS + ','
+            SPARKPLUG_METRICS = SPARKPLUG_METRICS + _type2str(metric.datatype)
+
+        logging.debug ('SPARKPLUG_METRICS = "' + SPARKPLUG_METRICS + '"')
+
+    eoninfo = main.eons[eon]
+    if msgtype == 'DBIRTH':
+        # map tag alias to tag name
+        for metric in inboundPayload.metrics:
+#            print ('checking for tag alias ' + str(metric))
+            if str(metric).find('alias:') == -1:
+                continue
+            if metric.alias in eoninfo.tagaliases:
+                if eoninfo.tagaliases[metric.alias] != metric.name:
+                    logging.error ('tag alias ' + str(metric.alias) + ' redefined from ' + eoninfo.tagaliases[metric.alias])
+            eoninfo.tagaliases[metric.alias] = metric.name
+	    logging.debug ('tag alias ' + str(metric.alias) + ' defined as ' + metric.name)
+
+    for metric in inboundPayload.metrics:
+        # map tag alias to tag name
+	metricname = 'unknown tag'
+	if metric.name != '':
+	    metricname = metric.name
+	else:
+            if metric.alias in eoninfo.tagaliases:
+	        metricname = eoninfo.tagaliases[metric.alias]
+
+        debug_metric (msgtype, device, metricname, metric)
+        tag = device + '/' + metricname
+        if tag not in main.tags:
+            main.num_tags += 1
+            newtag = Tag(main.num_tags, tag, now)
+            main.tags[tag] = newtag
 		
-		if metric.name != 'XDK/temp':
-			logging.debug ('Device ' + device + ' ignored metric ' + metric.name)
-			continue
+        if metricname != 'XDK/temp':
+            logging.debug ('Device ' + device + ' ignored metric ' + metricname)
+            continue
 
-		# logging.debug ('Device ' + device + ' metric ' + metric.name + ' = ' + str(metric.int_value))
-		if metric.int_value > main.thresh:
-			logging.error ('********* Device ' + device + ' metric '+ metric.name + ' greater ' + str(main.thresh))
-			main.total_triggered += 1
-			if device not in main.triggered_set:
-				main.triggered_set.add(device)
+        logging.debug ('Device ' + device + ' metric ' + metricname + ' = ' + str(metric.int_value))
+        if metric.int_value > main.thresh:
+            logging.error ('********* Device ' + device + ' metric '+ metricname + ' greater ' + str(main.thresh))
+            main.total_triggered += 1
+            if device not in main.triggered_set:
+                 main.triggered_set.add(device)
 
     return
 
@@ -358,6 +448,9 @@ class MyApp:
 
 		self.num_tags = 0
 		self.tags = dict()
+
+		self.num_tagaliases = 0
+		self.tagaliases = dict()
 
 		self.total_triggered = 0
 		self.triggered_set = set()
