@@ -19,6 +19,7 @@ import threading
 import multiprocessing
 import webbrowser
 import binascii
+import ssl
 
 # Sparkplug support
 sys.path.insert(0, "sparkplug/client_libraries/python/")
@@ -77,9 +78,9 @@ if debug:
       logger.setLevel(logging.DEBUG)
     else:
       formatting = '%(levelname)s %(asctime)s (%(module)s) - %(message)s'
-      logging.basicConfig(level=logging.ERROR, format=formatting, )
+      logging.basicConfig(level=logging.INFO, format=formatting, )
 
-      logger.setLevel(logging.ERROR)
+      logger.setLevel(logging.INFO)
 
 
 
@@ -200,14 +201,14 @@ def debug_metric(msgtype, device, metricname, metric):
 def _send_node_rebirth(client, groupid, eon):
     try:
         logging.debug ('sending NCMD rebirth...')
-	command = sparkplug.getDdataPayload()
-	addMetric(command, 'Node Control/Rebirth', 0, MetricDataType.Boolean, True)
-	byteArray = bytearray(command.SerializeToString())
-	client.publish('spBv1.0/' + groupid + '/NCMD/' + eon, byteArray, 0, False)
+        command = sparkplug.getDdataPayload()
+        addMetric(command, 'Node Control/Rebirth', 0, MetricDataType.Boolean, True)
+        byteArray = bytearray(command.SerializeToString())
+        client.publish('spBv1.0/' + groupid + '/NCMD/' + eon, byteArray, 0, False)
     except:
-	# print help information and exit:
-	logging.error ('some error')
-	logging.error (str(err))
+        # print help information and exit:
+        logging.error ('some error')
+        logging.error (str(err))
     return
 
 def _type2str(typeval):
@@ -253,10 +254,12 @@ def on_message(client, userdata, msg):
     tokens = msg.topic.split("/")
     if tokens[0] != "spBv1.0":
         logging.debug ("ignored non-Sparkplug message on topic " + msg.topic)
+        main.messages_ignored += 1
         return
 
     if len(tokens) < 4:
         logging.debug ("ignored non-Sparkplug topic " + msg.topic)
+        main.messages_ignored += 1
         return
 
     # TODO filter by groupid
@@ -268,20 +271,20 @@ def on_message(client, userdata, msg):
         neweon = Eon(main.num_eons, eon, now)
         main.eons[eon] = neweon
         if msgtype == 'NCMD':
-	    # nothing to do
-	    pass
+            # nothing to do
+            pass
         elif msgtype != 'NBIRTH':
-            logging.debug (msgtype + ' --> EON ' + eon + ' needs rebirth')
+            logging.debug (msgtype + ' --> Group ' + groupid + ' EON ' + eon + ' needs rebirth')
             main.num_eons_offline += 1
         else:
-            logging.debug (msgtype + ' --> EON ' + eon + ' online')
+            logging.debug (msgtype + ' --> Group ' + groupid + ' EON ' + eon + ' online')
 
     else:
         if msgtype == 'NDEATH':
-        	logging.debug (msgtype + ' --> EON ' + eon + ' offline')
+        	logging.debug (msgtype + ' --> Group ' + groupid + ' EON ' + eon + ' offline')
         	main.num_eons_offline += 1
         if msgtype == 'NBIRTH':
-        	logging.debug (msgtype + ' --> EON ' + eon + ' online')
+        	logging.debug (msgtype + ' --> Group ' + groupid + ' EON ' + eon + ' online')
         	if main.num_eons_offline > 0:
         		main.num_eons_offline -= 1
 
@@ -293,12 +296,12 @@ def on_message(client, userdata, msg):
         	newdevice = Device(main.num_devices, device, now)
         	main.devices[device] = newdevice
         	if msgtype != 'DBIRTH':
-        		logging.debug (msgtype + ' --> Device ' + device + ' needs rebirth')
+        		logging.debug (msgtype + ' --> Group ' + groupid + ' EON ' + eon + ' Device ' + device + ' needs rebirth')
 			# uncomment this line to send Node Control Rebirth
 	                #_send_node_rebirth (client, groupid, eon)
         		main.num_devices_offline += 1
         	else:
-        		logging.debug (msgtype + ' --> Device ' + device + ' online')
+        		logging.debug (msgtype + ' --> Group ' + groupid + ' EON ' + eon + ' Device ' + device + ' online')
 
         else:
         	if msgtype == 'DDEATH':
@@ -313,7 +316,7 @@ def on_message(client, userdata, msg):
     # the rest ignored
     if msgtype != 'DDATA' and msgtype != 'DBIRTH' and msgtype != 'NBIRTH' and msgtype != 'DDEATH' and msgtype != 'NDEATH':
         # comment the following out if too many
-	logging.debug ('topic ' + msg.topic + ' ignoring msg ' + msgtype)
+        logging.debug ('topic ' + msg.topic + ' ignoring msg ' + msgtype)
         inboundPayload = sparkplug_b_pb2.Payload()
 
         try:
@@ -323,6 +326,7 @@ def on_message(client, userdata, msg):
             pass
 
         logging.debug (inboundPayload)
+        main.messages_ignored += 1
         return
 
     # look at the payload only for NBIRTH, DBIRTH, DDATA, DDEATH and NDEATH
@@ -334,15 +338,22 @@ def on_message(client, userdata, msg):
         # TODO keep stats on parse failures
         pass
 
-    # uncomment below to dump Sparkplug B payload in JSON format
-    logging.debug (inboundPayload)
+    # periodic statistics
+    if main.last_time_received +10 <= now:
+        main.last_time_received = now
+        logging.info ('received ' + str (main.messages_received) + ' messages')
+        logging.info ('ignored ' + str (main.messages_ignored) + ' messages')
+        logging.info ('error ' + str (main.messages_error) + ' messages')
+
+    # uncomment below to dump Sparkplug B payload
+    #logging.debug (inboundPayload)
 
     report_sparkplug_metrics = False
     # uncomment below to dump Sparkplug B payload for SPARKPLUG_METRICS
     # if selectively listening on DBIRTH topic, this prints the necessary
     # metrics advertised in the DBIRTH for setting SPARKPLUG_METRICS in MIMIC
-    #if msgtype == 'DBIRTH':
-    #    report_sparkplug_metrics = True
+    if msgtype == 'DBIRTH':
+        report_sparkplug_metrics = True
     if report_sparkplug_metrics:
         SPARKPLUG_METRICS = ''
         for metric in inboundPayload.metrics:
@@ -370,16 +381,23 @@ def on_message(client, userdata, msg):
                 if eoninfo.tagaliases[metric.alias] != metric.name:
                     logging.error ('tag alias ' + str(metric.alias) + ' redefined from ' + eoninfo.tagaliases[metric.alias])
             eoninfo.tagaliases[metric.alias] = metric.name
-	    logging.debug ('tag alias ' + str(metric.alias) + ' defined as ' + metric.name)
+            logging.debug ('tag alias ' + str(metric.alias) + ' defined as ' + metric.name)
+
+    # only consider telemetry in DDATA messages
+    if msgtype != 'DDATA':
+        main.messages_ignored += 1
+        return
 
     for metric in inboundPayload.metrics:
+        logging.debug ('metric' + str(metric))
         # map tag alias to tag name
-	metricname = 'unknown tag'
-	if metric.name != '':
-	    metricname = metric.name
-	else:
+        metricname = 'unknown tag'
+        if metric.name != '':
+            metricname = metric.name
+        else:
             if metric.alias in eoninfo.tagaliases:
-	        metricname = eoninfo.tagaliases[metric.alias]
+                metricname = eoninfo.tagaliases[metric.alias]
+                logging.debug ('tag alias ' + str(metric.alias) + ' found as ' + metricname)
 
         debug_metric (msgtype, device, metricname, metric)
         tag = device + '/' + metricname
@@ -387,14 +405,15 @@ def on_message(client, userdata, msg):
             main.num_tags += 1
             newtag = Tag(main.num_tags, tag, now)
             main.tags[tag] = newtag
-		
-        if metricname != 'XDK/temp':
+
+        logging.debug ('Device ' + device + ' metric ' + metricname + ' = ' + str(metric.int_value))
+        if metricname != main.metric:
             logging.debug ('Device ' + device + ' ignored metric ' + metricname)
             continue
 
         logging.debug ('Device ' + device + ' metric ' + metricname + ' = ' + str(metric.int_value))
         if metric.int_value > main.thresh:
-            logging.error ('********* Device ' + device + ' metric '+ metricname + ' greater ' + str(main.thresh))
+            logging.error ('********* Device ' + device + ' metric '+ metricname + ' = ' + str(metric.int_value) + ' greater ' + str(main.thresh))
             main.total_triggered += 1
             if device not in main.triggered_set:
                  main.triggered_set.add(device)
@@ -408,31 +427,58 @@ def on_disconnect(client, userdata, rc):
     	logging.error ("unexpected disconnect: " + str(rc))
 
 def subscriber_client(addr):
-	client = mqtt.Client()
+	client = mqtt.Client(main.client_id, protocol=main.protocol)
 	client.on_connect = on_connect
 	client.on_message = on_message
 	client.on_disconnect = on_disconnect
 
+	if (main.user != None):
+		logging.debug ("user " + main.user)
+		client.username_pw_set(main.user, main.pwd)
+
+	if (main.is_tls):
+#		logging.debug ("cafile " + main.cafile)
+		client.tls_set(ca_certs=main.cafile, certfile=main.certfile, keyfile=main.keyfile, tls_version=ssl.PROTOCOL_SSLv23, cert_reqs=main.required)
+		client.tls_insecure_set(True)
+
+	logging.debug ("connecting to " + main.host_ip + ":" + str(main.port_num))
 	client.connect(main.host_ip, main.port_num, 60)
 
-	client.loop_forever(False)
+	try:
+		client.loop_forever(False)
+	except KeyboardInterrupt as err:
+		logging.debug ('KeyboardInterrupt')
+		logging.error (str(err))
 
 
 ###########################################################################
 class MyApp:
 	def __init__(self):
+		self.protocol = mqtt.MQTTv311
 		self.host_ip = None
 		self.port_num = None
+		self.client_id = None
+		self.user = None
+		self.pwd = None
+		self.is_tls = False
+		self.cafile = ""
+		self.certfile = None
+		self.keyfile = None
+		self.required = ssl.CERT_NONE
 		self.verbose = False
 		self.topic = 'spBv1.0/#'
 		self.qos = 0
+		self.metric = "XDK/temp"
 		self.thresh = 70000
 
 		self.is_stopped = False
 		self.is_paused = False
 
 		self.messages_received = 0
+		self.messages_ignored = 0
+		self.messages_error = 0
 		self.last_received = 0
+		self.last_time_received = 0
 		self.num_topics = 0
 		self.topics = dict()
 		self.clear_stats = False
@@ -459,8 +505,16 @@ class MyApp:
 		print ("Usage: sparkplug-thresh.py")
 		print ("\t[-h|--host host]        broker to connect to; default localhost")
 		print ("\t[-p|--port port]        port to connect to; default port 1883")
+		print ("\t[-i|--id client-id]     client ID; default ")
+		print ("\t[-u|--user user]        user name; default blank")
+		print ("\t[-P|--pass password]    password; default blank")
+		print ("\t[-T|--tls]              TLS; default off")
+		print ("\t[-c|--cafile filepath]  CA file; default none")
+		print ("\t[-C|--certfile filepath] certificate file; default none")
+		print ("\t[-K|--keyfile filepath] key file; default none")
 		print ("\t[-t|--topic topic]      topic; default spBv1.0/#")
 		print ("\t[-q|--qos qos]          QoS; default 0")
+		print ("\t[-T|--metric metric]    metric to monitor; default XDK/temp")
 		print ("\t[-T|--thresh threshold] temperature threshold; default 70000")
 		print ("\t[-v|--verbose]    verbose output")
 		return
@@ -476,7 +530,7 @@ class MyApp:
 	###############################
 	def command_line(self):
 		try:
-			opts, args = getopt.getopt(sys.argv[1:], "h:p:t:q:T:v", ["host=", "port=", "topic=", "qos=", "thresh=", "verbose"])
+			opts, args = getopt.getopt(sys.argv[1:], "h:p::i:u:P:Tc:C:K:t:q:M:T:v", ["host=", "port=", "id=", "user=", "pass=", "tls", "cafile=", "certfile=", "keyfile=", "topic=", "qos=", "metric=", "thresh=", "verbose"])
 		except getopt.GetoptError as err:
 			# print help information and exit:
 			logging.error (str(err)) # will print something like "option -a not recognized"
@@ -489,11 +543,27 @@ class MyApp:
 			elif o in ("-h", "--host"):
 				self.host_ip = a
 			elif o in ("-p", "--port"):
-				self.port_num = a
+				self.port_num = int(a)
+			elif o in ("-i", "--id"):
+				self.client_id = a
+			elif o in ("-u", "--user"):
+				self.user = a
+			elif o in ("-P", "--pass"):
+				self.pwd = a
+			elif o in ("-T", "--tls"):
+				self.is_tls = True
+			elif o in ("-c", "--cafile"):
+				self.cafile = a
+			elif o in ("-C", "--certfile"):
+				self.certfile = a
+			elif o in ("-K", "--keyfile"):
+				self.keyfile = a
 			elif o in ("-t", "--topic"):
 				self.topic = a
 			elif o in ("-q", "--qos"):
 				self.qos = int(a)
+			elif o in ("-M", "--metric"):
+				self.metric = a
 			elif o in ("-T", "--thresh"):
 				self.thresh = int(a)
 			else:
