@@ -28,7 +28,7 @@ in the list.
 
 Requires:
 
-- Python 2.7
+- Python 2.7, Python 3
 - Eclipse Paho Python https://www.eclipse.org/paho/clients/python/docs/
 - Sparkplug Python https://github.com/Cirrus-Link/Sparkplug
 
