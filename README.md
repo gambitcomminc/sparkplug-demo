@@ -42,11 +42,17 @@ Tested on both Linux and Windows.
 
 For sparkplug-thresh:
 ```
-% python sparkplug-thresh.py -h iot.eclipse.org -v
-DEBUG 2019-04-12 13:56:38,381 (sparkplug-thresh) - MQTT client connected with result code 0
-DEBUG 2019-04-12 13:56:40,884 (sparkplug-thresh) - DDATA --> EON 20:19:AB:F4:0E:10 needs rebirth
-DEBUG 2019-04-12 13:56:40,884 (sparkplug-thresh) - DDATA --> Device 20:19:AB:F4:0E:10/sensor11 needs rebirth
-DEBUG 2019-04-12 13:56:40,884 (sparkplug-thresh) - DDATA --> Device 20:19:AB:F4:0E:10/sensor11 metric XDK/temp = 50000
+% python3 sparkplug-thresh.py -h broker.gambitcom.com -v
+DEBUG 2023-08-31 10:03:56,466 (sparkplug-thresh) - connecting to broker.gambitcom.com:1883
+DEBUG 2023-08-31 10:03:56,489 (sparkplug-thresh) - MQTT client connected with result code 0
+DEBUG 2023-08-31 10:03:56,930 (sparkplug-thresh) - DDATA --> Group MIMIC EON 20:19:AB:F4:0E:20 needs rebirth
+DEBUG 2023-08-31 10:03:56,930 (sparkplug-thresh) - DDATA --> Group MIMIC EON 20:19:AB:F4:0E:20 Device 20:19:AB:F4:0E:20/sensor111 needs rebirth
+INFO 2023-08-31 10:03:56,930 (sparkplug-thresh) - received 1 messages
+INFO 2023-08-31 10:03:56,930 (sparkplug-thresh) - ignored 0 messages
+INFO 2023-08-31 10:03:56,930 (sparkplug-thresh) - error 0 messages
+DEBUG 2023-08-31 10:03:56,930 (sparkplug-thresh) - metricname: "XDK/temp"
+datatype: 3
+int_value: 10008
 ```
 
 and on Windows:
