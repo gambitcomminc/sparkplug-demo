@@ -289,7 +289,14 @@ def on_message(client, userdata, msg):
         		main.num_eons_offline -= 1
 
     if msgtype == 'DBIRTH' or msgtype == 'DDATA' or msgtype == 'DDEATH':
-        device = eon + '/' + tokens[4]
+        try:
+            device = eon + '/' + tokens[4]
+        except:
+            # TODO keep stats on parse failures
+            main.messages_error += 1
+            logging.error ('bad message on topic ' + str(tokens))
+            return
+
 
         if device not in main.devices:
         	main.num_devices += 1
@@ -334,9 +341,11 @@ def on_message(client, userdata, msg):
 	
     try:
         inboundPayload.ParseFromString(msg.payload)
-    except:
-        # TODO keep stats on parse failures
-        pass
+    except Exception as err:
+        # dump erroneous payloads somewhere to diagnose
+        logging.debug ('sparkplug parse failed ' + str(err))
+        main.messages_error += 1
+        return
 
     # periodic statistics
     if main.last_time_received +10 <= now:
@@ -344,6 +353,10 @@ def on_message(client, userdata, msg):
         logging.info ('received ' + str (main.messages_received) + ' messages')
         logging.info ('ignored ' + str (main.messages_ignored) + ' messages')
         logging.info ('error ' + str (main.messages_error) + ' messages')
+        logging.info ('EONs ' + str (main.num_eons))
+        logging.info ('Sensors ' + str (main.num_devices))
+        logging.info ('Tags ' + str (main.num_tags))
+        logging.info ('Tags ignored ' + str (main.ignored_tags))
 
     # uncomment below to dump Sparkplug B payload
     #logging.debug (inboundPayload)
@@ -405,6 +418,8 @@ def on_message(client, userdata, msg):
             main.num_tags += 1
             newtag = Tag(main.num_tags, tag, now)
             main.tags[tag] = newtag
+            if metricname != main.metric:
+                main.ignored_tags += 1
 
         logging.debug ('Device ' + device + ' metric ' + metricname + ' = ' + str(metric.int_value))
         if metricname != main.metric:
@@ -450,6 +465,24 @@ def subscriber_client(addr):
 		logging.debug ('KeyboardInterrupt')
 		logging.error (str(err))
 
+	logging.info ('Found ' + str(main.num_eons) + ' EONs:')
+	count = 1
+	for eon in main.eons:
+		logging.info ('EON #' + str(count) + ': ' + eon) 
+		count += 1
+
+	logging.info ('Found ' + str(main.num_devices) + ' sensors:')
+	count = 1
+	for device in main.devices:
+		logging.info ('Sensor #' + str(count) + ': ' + device) 
+		count += 1
+
+	logging.info ('Found ' + str(main.num_tags) + ' tags (EON/sensor/metric):')
+	count = 1
+	for tag in main.tags:
+		logging.info ('Tag #' + str(count) + ': ' + tag) 
+		count += 1
+
 
 ###########################################################################
 class MyApp:
@@ -494,6 +527,7 @@ class MyApp:
 
 		self.num_tags = 0
 		self.tags = dict()
+		self.ignored_tags = 0
 
 		self.num_tagaliases = 0
 		self.tagaliases = dict()
